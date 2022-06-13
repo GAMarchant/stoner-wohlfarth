@@ -1,0 +1,25 @@
+#Sub-routine for lammps designed to perturb spin direction before next minimisation
+
+#declare loop label
+label loop_perturb
+ 
+ #derive number of spins using count function
+ variable Nspin equal count(all)
+ 
+ #declare loop variable i, controlling which spin is being perturbed
+ variable i loop ${Nspin}
+
+ #declare variable for size of perturbation
+ variable epsilon equal 1E-9
+
+ #Use final spin values computed in c_outsp to 
+ variable sx equal normal(c_outsp[${i}][1],${epsilon},12345)
+ variable sy equal normal(c_outsp[${i}][2],${epsilon},12345)
+ variable sz equal normal(c_outsp[${i}][3],${epsilon},12345)
+ set             atom ${i} spin 1 ${sx} ${sy} ${sz}
+ 
+ #increase i (i.e. goto next spin)
+ next i
+
+#jump to start of loop (SELF refers to label being inside current file)
+jump SELF loop_perturb

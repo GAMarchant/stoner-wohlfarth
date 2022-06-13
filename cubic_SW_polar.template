@@ -1,0 +1,228 @@
+#LAMMPS in.run 
+
+#System set-up 
+units           metal
+atom_style      spin
+# atom_style      spin/kk
+atom_modify     map array
+boundary        p p p
+
+#Optionally read initial configuration from trajectory file (must be in lammps format)
+# read_data     singlespin.data
+
+#Lattice type 
+lattice         sc 3.0
+#Lattice size
+region          box block 0.0 1.0 0.0 1.0 0.0 1.0
+#Create lattice
+create_box      1 box
+create_atoms    1 box
+
+#Set mass of atoms
+mass            1 1.0
+
+#Set initial spins (can be random)
+set             group all spin 1.0 0.0 1.0 0.0
+#set            group all spin/random 12345 1
+
+# defines a pair/style for neighbor list, but do not use it
+pair_style      spin/exchange 1.0 
+#pair_style     spin/exchange cutoff (see https://docs.lammps.org/pair_spin_exchange.html)
+
+pair_coeff      * * exchange 1.0 0.0 0.0 1.0
+#pair_coeff     * * (interaction-type) (cutoff) (strength) (other parameters) (see https://docs.lammps.org/pair_spin_exchange.html)
+
+#Factor for converting from degrees to radians
+variable        deg2rad equal (2*PI)/360
+
+#Set field values
+variable        H equal 0
+variable        Htheta  equal   HFIELDTHETA
+variable        Hphi    equal   HFIELDPHI
+variable        Hx0 equal HFIELDX
+variable        Hy0 equal HFIELDY
+variable        Hz0 equal HFIELDZ
+#Normalise field vector
+variable        Hx equal ${Hx0}/sqrt(${Hx0}^2+${Hy0}^2+${Hz0}^2)
+variable        Hy equal ${Hy0}/sqrt(${Hx0}^2+${Hy0}^2+${Hz0}^2)
+variable        Hz equal ${Hz0}/sqrt(${Hx0}^2+${Hy0}^2+${Hz0}^2)
+#Field in polar coords
+variable	Htheta 	equal 	HFIELDTHETA 
+variable	Hphi 	equal 	HFIELDPHI
+
+#Set uniaxial anisotropy field values (currently set to zero)
+variable        Ku equal 0
+variable        Kux0 equal 0.0
+variable        Kuy0 equal 1.0
+variable        Kuz0 equal 1.0
+#Normalise anisotropy vector
+variable        Kux equal ${Kux0}/sqrt(${Kux0}^2+${Kuy0}^2+${Kuz0}^2)
+variable        Kuy equal ${Kuy0}/sqrt(${Kux0}^2+${Kuy0}^2+${Kuz0}^2)
+variable        Kuz equal ${Kuz0}/sqrt(${Kux0}^2+${Kuy0}^2+${Kuz0}^2)
+
+#Set cubic anisotropy field values
+variable        Kc1 	equal -1
+variable        Kc2 	equal 0
+
+#Set cubic anisotropy field values
+variable        Kc1     equal 1E-5 	#First order cubic anisotropy parameter
+variable        Kc2     equal 1E-6 	#Second order cubic anisotropy parameter
+variable	Kctheta_d equal KCTHETA #cubic orientation angle (theta) in deg.
+variable        Kcphi_d equal KCPHI 	#cubic orientation angle (phi) in deg.
+variable        Kctheta equal ${Kctheta_d}*${deg2rad} #cubic orientation angle (theta) in rad.
+variable        Kcphi equal ${Kcphi_d}*${deg2rad} #cubic orientation angle (phi) in rad.
+
+#Calculate cubic anisotropy easy direction vectors
+variable        Kcx equal sin(${Kctheta})*cos(${Kcphi})
+variable        Kcy equal sin(${Kctheta})*sin(${Kcphi})
+variable        Kcz equal cos(${Kctheta})
+
+variable        Kcx1 equal cos(${Kctheta})*cos(${Kcphi})
+variable        Kcx2 equal cos(${Kctheta})*sin(${Kcphi})
+variable        Kcx3 equal -sin(${Kctheta})
+
+variable        Kcy1 equal -sin(${Kcphi})
+variable        Kcy2 equal cos(${Kctheta})*cos(${Kcphi})
+variable        Kcy3 equal 0
+
+variable        Kcz1 equal sin(${Kctheta})*cos(${Kcphi})
+variable        Kcz2 equal sin(${Kctheta})*sin(${Kcphi})
+variable        Kcz3 equal cos(${Kctheta})
+
+
+#Set temperature ("temperature" replaced in bash script with desired value)
+variable        Temperature equal temperature
+
+#Set no. of steps in run (CHECK denotes how many steps are taken before average is calculated)
+#NOT USED
+variable        RUN equal 10000
+variable        CHECK equal 10000
+
+#Set equations of motion
+#Lattice no denotes fixed lattice
+fix             1 all nve/spin lattice no
+#Additional energy terms
+#Applied field: 
+fix             field all precession/spin zeeman ${H} ${Hx} ${Hy} ${Hz} 
+fix             uniax all precession/spin anisotropy ${Ku} ${Kux} ${Kuy} ${Kuz}
+fix             cubic all precession/spin cubic ${Kc1} ${Kc2} 1 0 0  0 1 0  0 0 1
+
+#This option determines whether to add spin precession torque to energy
+fix_modify      field energy yes
+fix_modify      uniax energy yes
+fix_modify      cubic energy yes
+#Apply a magnetic temperature (random torques)
+fix             mtemp all langevin/spin ${Temperature} 0.01 12345
+
+#Create variables to be computed
+compute         compute_spin all spin
+compute         outsp all property/atom spx spy spz sp
+compute         magsz all reduce ave c_outsp[3]
+
+compute         out_mag    all spin
+compute         out_pe     all pe
+compute         out_ke     all ke
+compute         out_temp   all temp
+
+variable        magx      equal c_compute_spin[1]
+variable        magy      equal c_compute_spin[2]
+variable        magz      equal c_compute_spin[3]
+variable        magtheta  equal acos(c_compute_spin[3])/${deg2rad}
+variable        magphi    equal atan2(c_compute_spin[2],c_compute_spin[1])/${deg2rad}
+
+
+variable        magnorm   equal c_compute_spin[4]
+variable        emag      equal c_compute_spin[5]
+variable        tmag      equal c_compute_spin[6]
+
+#Output display options
+#Frequency
+thermo          1000
+#Data
+
+#Choose to output uniaxial anisotropy data
+#thermo_style    custom step time v_H v_Kan v_Kctheta v_Kcphi v_magnorm v_magx v_magy v_magz v_emag etotal
+
+#Choose to output cubic anisotropy data
+thermo_style    custom v_H v_Htheta v_Hphi v_Hx v_Hy v_Hz v_Kc1 v_Kc2 v_Kctheta_d v_Kcphi_d v_Kcx v_Kcy v_Kcz v_magnorm v_magtheta v_magphi v_magx v_magy v_magz v_emag
+
+#Calculate time averages (not currently being used)
+fix             avespin all ave/time 1 ${CHECK} ${CHECK} v_Temperature v_H v_Hx v_Hy v_Hz v_Ku v_Kux v_Kuy v_Kuz c_magsz v_magz v_emag v_tmag file average_spin
+
+#Set simulation timestep
+timestep        0.1
+
+#Setup output trajectory file
+dump            1 all custom 10000 traj.temperature.dump type x y z c_outsp[1] c_outsp[2] c_outsp[3]
+
+#Set up range of fields (values substituted from bash script)
+variable	H_diff 	equal H_difference
+variable	H_n	equal N_quad_steps   
+
+#Setup minimisation style (lbfgs seems to perform better)
+min_style       spin/lbfgs
+#min_style       spin/cg
+
+
+#First H quadrant loop (0 to +Hmax)
+label loop_Q1
+ variable a loop ${H_n}
+ variable H equal ${H_diff}*(${a}-1)
+ fix             field all precession/spin zeeman ${H} ${Hx} ${Hy} ${Hz}
+ fix             uniax all precession/spin anisotropy ${Ku} ${Kux} ${Kuy} ${Kuz}
+ fix             cubic all precession/spin cubic ${Kc1} ${Kc2} ${Kcx1} ${Kcx2} ${Kcx3}  ${Kcy1} ${Kcy2} ${Kcy3}  ${Kcz1} ${Kcz2} ${Kcz3} 
+
+ print "Field = ${H} T"
+ minimize     1.0e-10 1.0e-10 1000 100
+   
+ #invoke custom script to perturb spins after minimisation (to avoid getting stuck in local minima)
+ include      perturb.lammps
+
+ print "Minimisation complete"
+
+ next a
+jump SELF loop_Q1
+print "QUADRANT 1 DONE"
+
+#+Hmax to -Hmax
+label loop_Q2
+ variable 2a equal ${H_n}*2+1
+ variable a loop ${2a}
+ variable H equal ${H_diff}*(${H_n})-${H_diff}*(${a}-1)
+ fix             field all precession/spin zeeman ${H} ${Hx} ${Hy} ${Hz}
+ fix             cubic all precession/spin cubic ${Kc1} ${Kc2} ${Kcx1} ${Kcx2} ${Kcx3}  ${Kcy1} ${Kcy2} ${Kcy3}  ${Kcz1} ${Kcz2} ${Kcz3}
+   
+ print "Field = ${H} T"
+ minimize     1.0e-10 1.0e-10 1000 100
+ 
+ #invoke custom script to perturb spins after minimisation (to avoid getting stuck in local minima)
+ include      perturb.lammps
+
+ print "Minimisation complete"
+
+ next a
+jump SELF loop_Q2
+print "QUADRANTS 2&3 DONE"
+
+#-Hmax to Hmax
+label loop_Q3
+ variable 2a equal ${H_n}*2+1
+ variable a loop ${2a}
+ variable H equal -${H_diff}*(${H_n})+${H_diff}*(${a})
+ fix             field all precession/spin zeeman ${H} ${Hx} ${Hy} ${Hz}
+ fix             cubic all precession/spin cubic ${Kc1} ${Kc2} ${Kcx1} ${Kcx2} ${Kcx3}  ${Kcy1} ${Kcy2} ${Kcy3}  ${Kcz1} ${Kcz2} ${Kcz3}
+
+ print "Field = ${H} T"
+ minimize     1.0e-10 1.0e-10 1000 100
+   
+ #invoke custom script to perturb spins after minimisation (to avoid getting stuck in local minima)
+ include      perturb.lammps
+   
+ print "Minimisation complete"
+
+ next a
+jump SELF loop_Q3
+print "QUADRANTS 4&5 DONE"
+
+print " "
+print "H Minimisation Loop done"

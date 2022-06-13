@@ -1,0 +1,56 @@
+#undo all previous gnuplot commands
+reset
+
+#set parameters for pdf file: 
+	#pdfcairo=recommended pdf option
+	#enhanced allows super/subscripts in text, dashed allows dashed lines
+set term pdfcairo enhanced dashed font "Times, 32" size 12in,10in linewidth 2
+
+#Set pdf filename
+set output "FILEPREF.MvH.pdf"
+
+#FILEPREF is placeholder for substitution in bash script
+set title "FILEPREF"
+
+#Plot multiple graphs at once
+set multiplot layout 2,1
+
+#labels on x/y axes
+set xlabel "Applied field strength |H| (T)"
+set ylabel "Reduced Magnetisation M_{| |}/|M|"
+
+#set ranges for plotting (chosen automatically to fit data by default
+#set xrange [-40000:40000] 
+set yrange [-1.1:1.1]
+
+#set options for legend, including font size and location on graph
+set key box opaque font ",28" spacing 1.5 top left
+
+#Include a grid
+set grid
+
+#Declare functions for parallel and perpendicular components of magnetisation wrt. field direction
+#Parallel component x1/y1/z1=magnetisation vector; x2/y2/z2=field vector
+paral_comp(x1,y1,z1,x2,y2,z2) = (x1*x2+y1*y2+z1*z2)/sqrt(x2**2+y2**2+z2**2)
+#Perpendicular component
+perp_comp(x1,y1,z1,x2,y2,z2)  = sqrt(x1**2+y1**2+z1**2)*sqrt((1-(paral_comp(x1,y1,z1,x2,y2,z2)/sqrt(x1**2+y1**2+z1**2))**2))
+
+#Plot data for parallel component, \ used to allow linebreaks (MAKE SURE THERE IS NO BLANK SPACE AFTER THESE CHARACTERS OR GNUPLOT WILL COMPLAIN)
+#Format: 'filename' using (x column):(y column) w l/lp/p (line/linepoint/point) lc (linecolor) N title "TITLE FOR LEGEND"
+#Dollar sign $ used to apply functions to column, e.g. 2*$1 denotes column 1 multiplied by 2
+plot\
+'FILEPREF.H-0-0-1.T-0.dat' using 3:(paral_comp($8,$9,$10,$4,$5,$6)):0 w l lc 1 title "H = [0 0 1], T=0",\
+'FILEPREF.H-1-0-1.T-0.dat' using 3:(paral_comp($8,$9,$10,$4,$5,$6)):0 w l lc 2 title "H = [1 0 1], T=0",\
+'FILEPREF.H-1-1-1.T-0.dat' using 3:(paral_comp($8,$9,$10,$4,$5,$6)):0 w l lc 3 title "H = [1 1 1], T=0"
+
+#Change yrange and ylabel for second plot
+set yrange [-0.1:1.1]
+set ylabel "Reduced Magnetisation M_{⊥}/|M|"
+
+#Title and legend not needed for second plot, so unset
+unset title
+unset key
+
+#Plot data for perpendicular component
+plot 'FILEPREF.H-0-0-1.T-0.dat' u 3:(perp_comp($8,$9,$10,$4,$5,$6)):0 w l lc 1 title "H = [0 0 1], T=0", 'FILEPREF.H-1-0-1.T-0.dat' u 3:(perp_comp($8,$9,$10,$4,$5,$6)):0 w l lc 2 title "H = [1 0 1], T=0", 'FILEPREF.H-1-1-1.T-0.dat' u 3:(perp_comp($8,$9,$10,$4,$5,$6)):0 w l lc 3 title "H = [1 1 1], T=0"
+
